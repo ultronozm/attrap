@@ -262,13 +262,30 @@ value is a list which is appended to the result of
 `attrap-alternatives'.  Usage: (attrap-alternatives CLAUSES...)"
   `(append ,@(mapcar (lambda (c) `(when ,(car c) ,@(cdr c))) clauses)))
 
-(defun attrap-elisp-fixer (msg _beg _end)
-  "An `attrap' fixer for any elisp warning given as MSG."
+(defun attrap-elisp-fixer (msg beg end)
+  "An `attrap' fixer for any elisp warning given as MSG.
+BEG and END delimit the diagnostic region."
   (append
    (when-let ((match (s-match "The first line should be of the form: \"\\(.*\\)\"" msg)))
      (attrap-one-option 'insert-package
        (beginning-of-line)
        (insert (nth 1 match) "\n")))
+   (when (string-match "'when-let' is an obsolete macro.*use 'when-let\\*'" msg)
+     (attrap-one-option '(replace-when-let-with-when-let*)
+       (goto-char beg)
+       (when (search-forward "when-let" end t)
+         (replace-match "when-let*" t t))))
+   (when (string-match "'if-let' is an obsolete macro.*use 'if-let\\*'" msg)
+     (attrap-one-option '(replace-if-let-with-if-let*)
+       (goto-char beg)
+       (when (search-forward "if-let" end t)
+         (replace-match "if-let*" t t))))
+   (when (string-match "'\\(.+?\\)' is an obsolete variable.*use the quoted symbol instead: '\\1" msg)
+     (let ((sym-name (match-string 1 msg)))
+       (attrap-one-option `(quote-obsolete-variable ',(intern sym-name))
+         (goto-char beg)
+         (when (search-forward (regexp-quote sym-name) end t)
+           (replace-match (format "'%s" sym-name) t t)))))
    (when-let ((match (s-match "You should have a section marked \"\\(.*\\)\"" msg)))
      (attrap-one-option 'insert-section-header
        (beginning-of-line)
